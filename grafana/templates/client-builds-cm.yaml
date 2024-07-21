@@ -1,8 +1,0 @@
-#apiVersion: v1
-#kind: ConfigMap
-#metadata:
-#  name: client-builds-cm
-#data:
-#  client-builds-cm.json: |-
-#    hello
-#{{ .Files.Get "${path.module}/dashboards/client-builds-cm.json" | indent 4 }}
