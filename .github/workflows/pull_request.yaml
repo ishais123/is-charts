@@ -1,0 +1,78 @@
+name: Helm template pull request test
+
+on:
+  pull_request:
+    branches: [ 'master' ]
+    paths:
+    - 'charts/**'
+
+jobs:
+  helm-template:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Helm tool installer
+      uses: Azure/setup-helm@v4.2.0
+
+    - name: Run Helm Template
+      id: helm-template
+      shell: bash
+      run: |
+        changed_folders=$(git diff --name-only origin/master... | grep 'charts/' | awk -F/ '{print $1"/"$2}' | uniq)
+        titles=""
+        templates=""
+        message=""
+        for folder in $changed_folders
+        do
+            if [ -f "${folder}/values.yaml" ]; then
+                cd $folder
+                helm_dep=$(helm dependencies build || true)
+                echo helm_dep:
+                echo $helm_dep
+                pwd
+                ls -la
+                if [[ ${helm_dep,,} != *"error"* && ${helm_dep,,} != *"failed"* ]]; then
+                  echo "in not error! before build"
+                  template=$(helm template . | tr -d \" || true)
+                  if [[ -n ${template} && ${template,,} != *"error"* ]]; then
+                    title="Values file found in ${folder} :white_check_mark:"
+                  else
+                    title="Template error!, Values file found in ${folder} :red_circle:"
+                  fi
+                  message+="<details>
+                  <summary>${title}</summary>
+
+          \`\`\`console
+          ${template}
+          \`\`\`
+          </details>"
+                else
+                  title="Dependencies error! in ${folder} :red_circle:"
+                  message+="<details><summary>${title}</summary></details>"
+                fi
+                cd -
+            else
+                message+="<details><summary>No values file found for the chart in ${folder} :warning:</summary></details>"
+            fi
+        done
+
+        echo $message
+        echo 'message<<EOF' >> $GITHUB_OUTPUT
+        echo "${message}" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+
+
+
+    - name: Update pr with helm template result
+      uses: thollander/actions-comment-pull-request@v2.5.0
+      env:
+        MESSAGE: ${{ steps.helm-template.outputs.message }}
+      with:
+        comment_tag: 'helm_template'
+        message: |
+          ### Helm Chart Template Test 🤖
+          ${{ env.MESSAGE }}
